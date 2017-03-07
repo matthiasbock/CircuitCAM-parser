@@ -1,0 +1,9 @@
+# temporary
+*~
+.*.swp
+
+# binary
+*.cam
+*.CAM
+*.pyc
+
