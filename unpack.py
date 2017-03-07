@@ -96,26 +96,37 @@ PrettyPrinter(indent=4).pprint(tools)
 # something with units (?)
 
 # tons of coordinates...
-print "Parsing content..."
+print "Parsing design..."
 cursor = 0x314C
 
 while data[cursor:cursor+3] == "\x95\x26\x03":
+    begin = cursor
+
     # 0x95 26 03
     cursor += 3
 
     layerNr = uint32(data[cursor:cursor+4])
     cursor += 4
-    print "Layer: "+str(layerNr)+" ("+layer[layerNr][1]+")"
+    print "Layer:  "+str(layerNr)+" ("+layer[layerNr][1]+")"
+    print "Begin:  "+hex(begin)
 
-    for i in range(4):
-        drillHole = data[cursor:cursor+19]
-        for b in drillHole:
-            print "{0:#0{1}x}".format(ord(b),4),
-        print
-        cursor += 19
+#    for i in range(4):
+#        drillHole = data[cursor:cursor+19]
+#        for b in drillHole:
+#            print "{0:#0{1}x}".format(ord(b),4),
+#        print
+#        cursor += 19
+
+    while data[cursor:cursor+2] != "\x20\x95":
+        cursor += 1
 
     # 0x20
     cursor += 1
+
+    end = cursor
+    print "End:    "+hex(end)
+    print "Length: "+str(end-begin)
+
 
 cursor = 0x369DF
 # 0x95 39 02
