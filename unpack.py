@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from pprint import PrettyPrinter
+from ansi import *
 from helper import *
 
 # import file
@@ -107,7 +108,7 @@ while data[cursor:cursor+3] == "\x95\x26\x03":
 
     layerNr = uint32(data[cursor:cursor+4])
     cursor += 4
-    print "Layer:  "+str(layerNr)+" ("+layer[layerNr][1]+")"
+    print "Layer:  "+ANSI_FG_CYAN+str(layerNr)+" = "+layer[layerNr][1]+ANSI_RESET
     print "Begin:  "+hex(begin)
 
 #    for i in range(4):
@@ -125,7 +126,83 @@ while data[cursor:cursor+3] == "\x95\x26\x03":
 
     end = cursor
     print "End:    "+hex(end)
+
+    wrap = [2, 6]
+    for c in range(begin,end):
+        # end
+        if data[c] == '\x20' \
+        and data[c-1] != '\x55' \
+        and data[c-4:c-2] != "\x55\x00" \
+        and data[c-3:c-1] != "\x55\x00":
+            print
+            print "{0:#0{1}x}".format(ord(data[c]),4) + ANSI_FG_YELLOW + " // end" + ANSI_RESET
+        else:
+            print "{0:#0{1}x}".format(ord(data[c]),4),
+
+        if data[c+1:c+3] == "\x55\x04":
+            print ANSI_FG_YELLOW + "\n// begin something" + ANSI_RESET,
+
+        # polygon parsing
+        if data[c+1:c+3] == "\x55\x0b":
+            print ANSI_FG_YELLOW + "\n// begin polygon" + ANSI_RESET,
+
+        if data[c+1:c+3] == "\x55\x1f":
+            print ANSI_FG_YELLOW + "\n// begin something" + ANSI_RESET,
+
+        if data[c+1:c+3] == "\x55\x20":
+            print ANSI_FG_YELLOW + "\n// begin something" + ANSI_RESET,
+
+        if data[c+1:c+3] == "\x55\x24":
+            print ANSI_FG_YELLOW + "\n// begin something" + ANSI_RESET,
+
+        # coordinates parsing
+        if (data[c+1] == '\x55' or data[c+1] == '\x20') \
+        and data[c-3] != '\x55':
+            s = None
+            if data[c-11:c-9] == "\x55\x00":
+                s = data[c-11:c+1]
+            if data[c-16:c-14] == "\x55\x00":
+                s = data[c-16:c+1]
+            if s != None:
+                x = s[3:6]
+                y = s[8:11]
+                print ANSI_FG_CYAN,
+                for i in range(len(x)):
+                    print "{0:#0{1}x}".format(ord(x[i]),4),
+                print ANSI_FG_RED + str(uint24(x)) + ANSI_FG_CYAN,
+                for i in range(len(y)):
+                    print "{0:#0{1}x}".format(ord(y[i]),4),
+                print ANSI_FG_RED + str(uint24(y)) + ANSI_RESET,
+
+        if data[c+1:c+3] == "\x55\x00":
+            print ANSI_FG_MAGENTA + "\n// coordinates" + ANSI_RESET,
+
+        # circle/arc parsing
+        if data[c+1:c+3] == "\x55\x05":
+            print ANSI_FG_GREEN + "\n// circle/arc" + ANSI_RESET,
+
+        # pretty-printing
+        if data[c+1:c+3] == "\x55\x00" \
+        or data[c+1:c+3] == "\x55\x01" \
+        or data[c+1:c+3] == "\x55\x04" \
+        or data[c+1:c+3] == "\x55\x05" \
+        or data[c+1:c+3] == "\x55\x0b" \
+        or data[c+1:c+3] == "\x55\x17" \
+        or data[c+1:c+3] == "\x55\x1e" \
+        or data[c+1:c+3] == "\x55\x1f" \
+        or data[c+1:c+3] == "\x55\x18" \
+        or data[c+1:c+3] == "\x55\x24":
+            print
+
+        try:
+            if wrap.index(c-begin) > -1:
+                print
+        except:
+            pass
+
+    print
     print "Length: "+str(end-begin)
+    raw_input("Hit return...");
 
 
 cursor = 0x369DF
