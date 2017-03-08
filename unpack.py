@@ -199,26 +199,34 @@ while data[cursor:cursor+3] == "\x95\x26\x03" \
         if (data[c+1] == '\x55' or data[c+1] == '\x20') \
         and data[c-3] != '\x55':
             s = None
+            radius = None
             if data[c-11:c-9] == "\x55\x00":
                 # 2x values
                 s = data[c-11:c+1]
-                x = s[3:7]
-                y = s[8:12]
 
             if data[c-16:c-14] == "\x55\x00":
                 # 3x values
                 s = data[c-16:c+1]
-                x = s[8:12]
-                y = s[13:17]
+                radius = s[13:17]
 
             if s != None:
+                x = s[3:7]
                 print ANSI_FG_CYAN,
                 for i in range(len(x)):
                     print "{0:#0{1}x}".format(ord(x[i]),4),
-                print ANSI_FG_BLUE + "X=" + ANSI_RESET + str(float32(x)) + ANSI_FG_CYAN,
+                print ANSI_FG_YELLOW + "X=" + ANSI_RESET + str(float32(x)),
+
+                y = s[8:12]
+                print ANSI_FG_CYAN,
                 for i in range(len(y)):
                     print "{0:#0{1}x}".format(ord(y[i]),4),
-                print ANSI_FG_BLUE + "Y=" + ANSI_RESET + str(float32(y)) + ANSI_RESET,
+                print ANSI_FG_YELLOW + "Y=" + ANSI_RESET + str(float32(y)),
+
+                if radius != None:
+                    print ANSI_FG_CYAN,
+                    for i in range(len(radius)):
+                        print "{0:#0{1}x}".format(ord(radius[i]),4),
+                    print ANSI_FG_YELLOW + "R=" + ANSI_RESET + str(float32(radius)),
 
         if data[c+1:c+3] == "\x55\x00":
             print ANSI_FG_MAGENTA + "\n// coordinates" + ANSI_RESET,
