@@ -76,14 +76,23 @@ raw_input("Hit return...");
 while data[cursor] == '\x20':
     cursor += 1
 
-# GerberDefault?
-# SiebMeyerTools?
-# ToolTutor?
-# NcDrillDefault?
-
 # parse tool list
 print "Parsing tool list..."
 cursor = 0x1843
+
+# 0x95 4D: Beginn der Werkzeuggruppen
+# 0x95 4F: Beginn der Werkzeuggruppen
+
+# 0x95 29: Werkzeuggruppe
+
+# 0x95 1F: Werkzeugliste
+# 0x95 2F: Werkzeugliste
+# 0x95 30: Werkzeugliste
+# 0x95 33: Werkzeugliste
+
+# 0x95 27
+# 0x95 07 } Werkzeug
+# 0x95 08
 
 tools = []
 for i in range(81):
@@ -191,19 +200,25 @@ while data[cursor:cursor+3] == "\x95\x26\x03" \
         and data[c-3] != '\x55':
             s = None
             if data[c-11:c-9] == "\x55\x00":
+                # 2x values
                 s = data[c-11:c+1]
+                x = s[3:7]
+                y = s[8:12]
+
             if data[c-16:c-14] == "\x55\x00":
+                # 3x values
                 s = data[c-16:c+1]
+                x = s[8:12]
+                y = s[13:17]
+
             if s != None:
-                x = s[3:6]
-                y = s[8:11]
                 print ANSI_FG_CYAN,
                 for i in range(len(x)):
                     print "{0:#0{1}x}".format(ord(x[i]),4),
-                print ANSI_FG_RED + str(uint24(x)) + ANSI_FG_CYAN,
+                print ANSI_FG_BLUE + "X=" + ANSI_RESET + str(float32(x)) + ANSI_FG_CYAN,
                 for i in range(len(y)):
                     print "{0:#0{1}x}".format(ord(y[i]),4),
-                print ANSI_FG_RED + str(uint24(y)) + ANSI_RESET,
+                print ANSI_FG_BLUE + "Y=" + ANSI_RESET + str(float32(y)) + ANSI_RESET,
 
         if data[c+1:c+3] == "\x55\x00":
             print ANSI_FG_MAGENTA + "\n// coordinates" + ANSI_RESET,
