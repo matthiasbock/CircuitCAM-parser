@@ -1,11 +1,14 @@
 #!/usr/bin/python
 
+from sys import argv
 from pprint import PrettyPrinter
 from ansi import *
 from helper import *
 
 # import file
 filename = "CircuitCAM.cam"
+if len(argv) > 1:
+    filename = argv[1]
 
 data = open(filename,'r').read()
 
@@ -25,19 +28,28 @@ for i in range(keywordMapLength):
     cursor = terminator+1
 
 print keywordMap
-print str(len(keywordMap))
 
 # parse file metadata
-print "Parsing metadata(?)..."
-metainfo = data[cursor:0x4E7]
+print "Skipping 168 bytes of metadata(?)..."
+metaLength = 168
+#metainfo = data[cursor:cursor+metaLength]
+cursor += 168
 
 # parse layer list
 print "Parsing layer list..."
-cursor = 0x4E7
+# 0x95 43
+cursor += 2
+
 layer = {}
 for l in range(30):
     # 0x95 1B 02
+    # or
+    # 0x95 18 02
     layerMagic = data[cursor:cursor+3]
+    if  layerMagic != "\x95\x1b\x02" \
+    and layerMagic != "\x95\x17\x02" \
+    and layerMagic != "\x95\x18\x02":
+        break
     cursor += 3
 
     layerNr = uint32(data[cursor:cursor+4])
@@ -58,6 +70,11 @@ for l in range(30):
     layer[layerNr] = [layerMagic, layerName, len(layerMeta), hex(len(layerMeta)), layerMeta]
 
 PrettyPrinter(indent=4).pprint(layer)
+raw_input("Hit return...");
+
+# skip the spaces
+while data[cursor] == '\x20':
+    cursor += 1
 
 # GerberDefault?
 # SiebMeyerTools?
@@ -92,18 +109,32 @@ for i in range(81):
 
     tools.append( [toolMagic, toolNr, toolName, toolMeta] )
 
+    if data[cursor-1:cursor+3] == "\x20\x20\x20\x20":
+        # four spaces mark the end of the tool section
+        break
+
 PrettyPrinter(indent=4).pprint(tools)
+raw_input("Hit return...");
 
 # something with units (?)
+print "Skipping something with units..."
+while data[cursor:cursor+2] != "\x95\x33" \
+  and data[cursor:cursor+2] != "\x95\x34":
+    cursor += 1
+while data[cursor:cursor+3] != "\x95\x26\x03" \
+  and data[cursor:cursor+3] != "\x95\x21\x03":
+    cursor += 1
 
 # tons of coordinates...
 print "Parsing design..."
-cursor = 0x314C
 
-while data[cursor:cursor+3] == "\x95\x26\x03":
+while data[cursor:cursor+3] == "\x95\x26\x03" \
+   or data[cursor:cursor+3] == "\x95\x21\x03":
     begin = cursor
 
     # 0x95 26 03
+    # or
+    # 0x95 21 03
     cursor += 3
 
     layerNr = uint32(data[cursor:cursor+4])
