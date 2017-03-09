@@ -19,12 +19,15 @@ cursor = 0
 # Magic bytes indicate the type of the following data
 #
 magicID      = '\x02'
+magicTransform = '\x05' # 1 byte follows
 magicSInt8   = '\x07'
+magicSInt16  = '\x08'
 magicUInt8   = '\x27'
 magicUInt64  = '\x1a'  # 8 bytes follow, more significant 4 bytes first, in both 4 byte blocks: little-endian
 magicFloat32 = '\x2a'  # 4 bytes, little-endian
 magicUnknown1 = '\x0a' # 4 bytes follow
 magicUnknown2 = '\x25' # 1 byte follows
+magicBoolean = '\x67'  # 1 byte follow, 0x00 or 0x01
 
 #
 # Functions for reading a data type
@@ -39,6 +42,19 @@ def readUInt32():
     global data, cursor
     i = uint32(data[cursor:cursor+4])
     cursor += 4
+    return i
+
+# TODO
+def readSInt8():
+    # maybe this needs change
+    return readByte()
+
+# TODO
+def readSInt16():
+    # maybe this needs conversion
+    global data, cursor
+    i = sint16(data[cursor:cursor+2])
+    cursor += 2
     return i
 
 def readFloat32():
@@ -56,6 +72,11 @@ def readString():
     cursor += 1
     return s
 
+def readBoolean():
+    global data, cursor
+    c = data[cursor]
+    cursor += 1
+    return c == '\x01'
 
 # parse header
 header = data[:0x16]
@@ -88,7 +109,7 @@ def readTimeStamp():
     global data, cursor
     cursor += 13
 
-def readDesignLevel():
+def readIdName():
     global data, cursor
     assert data[cursor] == magicID
     cursor += 1
@@ -97,6 +118,18 @@ def readDesignLevel():
     # layer name as string
     name = readString()
     return "id="+str(id)+",name="+name
+
+def readConfigItem():
+    global data, cursor
+    s = readIdName()
+    s2 = ""
+    if not data[cursor] in "\x55\x95\x20":
+        s2 = "::0x"
+        # read another four bytes
+        for i in range(4):
+            s2 += '{:02X}'.format(ord(data[cursor]))
+            cursor += 1
+    return s+s2
 
 def readColor():
     global data, cursor
@@ -138,21 +171,26 @@ def readScCoordinate():
     cursor += 10
     return "0x"+"-".join('{:02X}'.format(ord(a)) for a in s)
 
-def readConfigGerber():
+def readScScale():
     global data, cursor
-    assert data[cursor] == magicID
+    if data[cursor] != magicUnknown1:
+        return "<arguments missing>"
+    assert data[cursor] == magicUnknown1
     cursor += 1
-    id = readUInt32()
-    name = readString()
-    return "id="+str(id)+",name="+name
-
-def readConfigItem():
-    global data, cursor
-    assert data[cursor] == magicID
+    f = readFloat32()
+    assert data[cursor] in [magicSInt8, magicUInt8]
     cursor += 1
-    id = readUInt32()
-    name = readString()
-    return "id="+str(id)+",name="+name
+    b = readByte()
+    if data[cursor] in [magicSInt8, magicUInt8]:
+        # read another byte and float
+        cursor += 1
+        b2 = readByte()
+        assert data[cursor] == magicFloat32
+        cursor += 1
+        f2 = readFloat32()
+        return "f,b:b,f="+str(f)+","+str(b)+":"+","+str(b2)+","+str(f2)
+    else:
+        return "f,b="+str(f)+","+str(b)
 
 def readShapeType():
     global data, cursor
@@ -163,10 +201,22 @@ def readShapeType():
 
 def readShapeParameter():
     global data, cursor
-    assert data[cursor] == magicFloat32
+    assert data[cursor] == magicFloat32 \
+        or data[cursor] == magicUnknown1
+    readExtraFloat = False
+    if data[cursor] == magicUnknown1:
+        print "!",
+        readExtraFloat = True
     cursor += 1
+
     f = readFloat32()
-    return str(f)
+    if readExtraFloat:
+        assert data[cursor] == magicFloat32
+        cursor += 1
+        f2 = readFloat32()
+        return str(f)+","+str(f2)
+    else:
+        return str(f)
 
 def readPtr():
     global data, cursor
@@ -176,10 +226,12 @@ def readPtr():
     assert data[cursor] == magicFloat32
     cursor += 1
     b = readFloat32()
-    assert data[cursor] == magicFloat32
-    cursor += 1
-    c = readFloat32()
-    return str(a)+","+str(b)+","+str(c)
+    if data[cursor] == magicFloat32:
+        cursor += 1
+        c = readFloat32()
+        return "f,f,f="+str(a)+","+str(b)+","+str(c)
+    else:
+        return "f,f="+str(a)+","+str(b)
 
 def readEndType():
     global data, cursor
@@ -201,6 +253,139 @@ def readPathWidth():
     cursor += 1
     f = readFloat32()
     return str(f)
+
+def readTransform():
+    global data, cursor
+    assert data[cursor] == magicTransform
+    cursor += 1
+    b = readByte()
+    return str(b)
+
+
+#
+# captureInterval can have multiple layouts:
+#  float,float,byte,byte,float
+#  float,float,float,float
+#  float,float
+#
+def readCaptureInterval():
+    global data, cursor
+    assert data[cursor] == magicUnknown1
+    cursor += 1
+    f1 = readFloat32()
+    extraFloat = False
+    if data[cursor] == magicUnknown1: # then captureInterval has four floats, otherwise only 3
+        cursor += 1
+        extraFloat = True
+        fx = readFloat32()
+    assert data[cursor] in [magicFloat32, magicUnknown1]
+    cursor += 1
+    f2 = readFloat32()
+    if data[cursor] in "\x95\x55\x20":
+        if extraFloat:
+            return "f,f,f="+str(f1)+","+str(fx)+","+str(f2)
+        return "f,f="+str(f1)+","+str(f2)
+    # else:
+    if not extraFloat:
+        b1 = readByte()
+        b2 = readByte()
+    assert data[cursor] == magicFloat32
+    cursor += 1
+    f3 = readFloat32()
+    if extraFloat:
+        return "f,f,f,f="+str(f1)+","+str(fx)+","+str(f2)+","+str(f3)
+    else:
+        return "f,f,b,b,f="+str(f1)+","+str(f2)+","+hex(b1)+","+hex(b2)+","+str(f3)
+
+def readMinDrawLength():
+    global data, cursor
+    assert data[cursor] == magicFloat32
+    cursor += 1
+    f = readFloat32()
+    return str(f)
+
+def readOverlap():
+    global data, cursor
+    assert data[cursor] == magicFloat32
+    cursor += 1
+    f = readFloat32()
+    return str(f)
+
+#
+# e can have the following shapes:
+#  0x07 XX 27 XX 67 XX
+#  0x08 XX XX 27 XX 67 XX
+#
+def readE():
+    global data, cursor
+    assert data[cursor] in [magicSInt8, magicSInt16]
+    t = data[cursor]
+    cursor += 1
+    if t == magicSInt8:
+        v = readSInt8()
+    elif t == magicSInt16:
+        v = readSInt16()
+
+    assert data[cursor] == magicUInt8
+    cursor += 1
+    u = readByte()
+
+    assert data[cursor] == magicBoolean
+    cursor += 1
+    b = readBoolean()
+
+    return str(v)+","+str(u)+","+str(b)
+
+def readJobInteger():
+    global data, cursor
+    assert data[cursor] == magicSInt8
+    cursor += 1
+    i1 = readSInt8()
+    print hex(ord(data[cursor]))
+    print hex(ord(data[cursor+1]))
+    print hex(ord(data[cursor+2]))
+    assert data[cursor] == magicUInt8
+    cursor += 1
+    i2 = readByte()
+    return str(i1)+","+str(i2)
+
+def readJobReal():
+    global data, cursor
+    assert data[cursor] == magicSInt8
+    cursor += 1
+    a = readSInt8()
+    assert data[cursor] == magicFloat32
+    cursor += 1
+    f = readFloat32()
+    return str(a)+","+str(f)
+
+def readJobIdentifier():
+    global data, cursor
+    assert data[cursor] == magicSInt8
+    cursor += 1
+    a = readSInt8()
+    s = readString()
+    return str(a)+","+s
+
+def readJobString():
+    global data, cursor
+    assert data[cursor] in [magicSInt8, magicSInt16]
+    t = data[cursor]
+    cursor += 1
+    if t == magicSInt8:
+        a = readSInt8()
+    elif t == magicSInt16:
+        a = readSInt16()
+    s = readString()
+    return str(a)+","+s
+
+def readJobForm():
+    global data, cursor
+    assert data[cursor] == magicSInt8
+    cursor += 1
+    a = readSInt8()
+    return str(a)
+
 
 #
 # Begin parsing a block in the file
@@ -257,7 +442,7 @@ def parseBlock():
         return
 
     elif decoded == "designLevel":
-        print readDesignLevel(),
+        print readIdName(),
 
     elif decoded == "displayAttributes":
         # no arguments
@@ -284,7 +469,7 @@ def parseBlock():
         return
 
     elif decoded == "configGerber":
-        print readConfigGerber(),
+        print readIdName(),
 
     elif decoded == "configHeader":
         # no arguments
@@ -310,10 +495,6 @@ def parseBlock():
         # no arguments
         return
 
-    elif decoded == "circle":
-        # no arguments
-        return
-
     elif decoded == "ptr":
         print readPtr(),
 
@@ -330,6 +511,89 @@ def parseBlock():
     elif decoded == "pathWidth":
         print readPathWidth(),
 
+    elif decoded == "captureInterval":
+        print readCaptureInterval(),
+
+    elif decoded == "minDrawLength":
+        print readMinDrawLength(),
+
+    elif decoded == "path":
+        # no arguments
+        return
+
+    elif decoded == "curve":
+        # no arguments
+        return
+
+    elif decoded == "circle":
+        # no arguments
+        return
+
+    elif decoded == "rectangle":
+        # no arguments
+        return
+
+    elif decoded == "configsSiebMeyer" \
+      or decoded == "configsExcellon" \
+      or decoded == "configsHpgl" \
+      or decoded == "configsLpkfMillDrill" \
+      or decoded == "configsDxf":
+        # no arguments
+        return
+
+    elif decoded == "configSiebMeyer" \
+      or decoded == "configExcellon" \
+      or decoded == "configHpgl" \
+      or decoded == "configLpkfMillDrill" \
+      or decoded == "configDxf":
+        print readIdName(),
+
+    elif decoded == "ScScale":
+        print readScScale(),
+
+    elif decoded == "overlap":
+        print readOverlap(),
+
+    elif decoded == "e":
+        print readE(),
+
+    elif decoded == "layouts":
+        # no arguments
+        return
+
+    elif decoded == "layout":
+        print readIdName(),
+
+    elif decoded == "jobs" \
+      or decoded == "jobsInsulate" \
+      or decoded == "jobsOutput" \
+      or decoded == "jobHeader" \
+      or decoded == "jobTask":
+        # no arguments
+        return
+
+    elif decoded == "jobInsulate" \
+      or decoded == "jobOutput":
+        print readIdName(),
+
+    elif decoded == "jobInteger":
+        print readJobInteger(),
+
+    elif decoded == "jobReal":
+        print readJobReal(),
+
+    elif decoded == "jobIdentifier":
+        print readJobIdentifier(),
+
+    elif decoded == "jobString":
+        print readJobString(),
+
+    elif decoded == "jobForm":
+        print readJobForm(),
+
+    elif decoded == "transform":
+        print readTransform(),
+
     else:
         print "unsupported block type encountered"
         exit()
@@ -337,7 +601,9 @@ def parseBlock():
 #
 # Parse all entries in the file
 #
-for i in range(700):
+for i in range(2000):
+    assert data[cursor] in "\x55\x95\x20\xB5\x52"
+
     if data[cursor] == '\x55':
         # begin section?
         cursor += 1
@@ -354,5 +620,11 @@ for i in range(700):
         # end section
         cursor += 1
         print ")"
+
+    elif data[cursor] == '\xb5':
+        # no idea, what this is
+        # comes after block 'configsHpgl'
+        print "Encountered unrecognized byte sequence"
+        cursor += 2
 
 print

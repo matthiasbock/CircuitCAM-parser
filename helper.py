@@ -16,3 +16,9 @@ def int32(s):
 
 def uint24(s):
     return unpack('<L', '\0'+s)[0]
+
+def sint8(s):
+    return unpack('b', s)[0]
+
+def sint16(s):
+    return unpack('h', s)[0]
