@@ -4,6 +4,7 @@ from sys import argv
 from pprint import PrettyPrinter
 from ansi import *
 from helper import *
+from magic import *
 
 # import file
 filename = "CircuitCAM.cam"
@@ -11,264 +12,347 @@ if len(argv) > 1:
     filename = argv[1]
 
 data = open(filename,'r').read()
+cursor = 0
+
+
+#
+# Magic bytes indicate the type of the following data
+#
+magicID      = '\x02'
+magicSInt8   = '\x07'
+magicUInt8   = '\x27'
+magicUInt64  = '\x1a'  # 8 bytes follow, more significant 4 bytes first, in both 4 byte blocks: little-endian
+magicFloat32 = '\x2a'  # 4 bytes, little-endian
+magicUnknown1 = '\x0a' # 4 bytes follow
+magicUnknown2 = '\x25' # 1 byte follows
+
+#
+# Functions for reading a data type
+#
+def readByte():
+    global data, cursor
+    b = data[cursor]
+    cursor += 1
+    return ord(b)
+
+def readUInt32():
+    global data, cursor
+    i = uint32(data[cursor:cursor+4])
+    cursor += 4
+    return i
+
+def readFloat32():
+    global data, cursor
+    f = float32(data[cursor:cursor+4])
+    cursor += 4
+    return f
+
+def readString():
+    global data, cursor
+    s = ""
+    while data[cursor] != '\0':
+        s += data[cursor]
+        cursor += 1
+    cursor += 1
+    return s
+
 
 # parse header
-header = data[:0x1B]
-print header
+header = data[:0x16]
+print "File magic: "+header
+assert header == "BE == Binary EDIF File"
+print
 
 # parse keyword map
-keywordMapLength = uint32(data[0x1B:0x1F])
-print 'Parsing '+str(keywordMapLength)+' keywords...'
+cursor = 0x1B
+dictionaryLength = readUInt32()
+print "Parsing dictionary with "+str(dictionaryLength)+" elements..."
 
-cursor = 0x1F
-keywordMap = []
-for i in range(keywordMapLength):
+dictionary = []
+for i in range(dictionaryLength):
     terminator = data.find('\0', cursor)
-    keywordMap.append( data[cursor:terminator] )
+    dictionary.append( data[cursor:terminator] )
     cursor = terminator+1
 
-print keywordMap
+print dictionary
+print
 
-# parse file metadata
-print "Skipping 168 bytes of metadata(?)..."
-metaLength = 168
-#metainfo = data[cursor:cursor+metaLength]
-cursor += 168
+something = readUInt32()
+print "Something: "+str(something)
 
-# parse layer list
-print "Parsing layer list..."
-# 0x95 43
-cursor += 2
 
-layer = {}
-for l in range(30):
-    # 0x95 1B 02
-    # or
-    # 0x95 18 02
-    layerMagic = data[cursor:cursor+3]
-    if  layerMagic != "\x95\x1b\x02" \
-    and layerMagic != "\x95\x17\x02" \
-    and layerMagic != "\x95\x18\x02":
-        break
-    cursor += 3
+#
+# Functions to read CircuitCAM-specific fields in the file
+#
+def readTimeStamp():
+    global data, cursor
+    cursor += 13
 
-    layerNr = uint32(data[cursor:cursor+4])
-    cursor += 4
+def readDesignLevel():
+    global data, cursor
+    assert data[cursor] == magicID
+    cursor += 1
+    # object id
+    id = readUInt32()
+    # layer name as string
+    name = readString()
+    return "id="+str(id)+",name="+name
 
-    layerName = ""
-    while data[cursor] != '\0':
-        layerName += data[cursor]
+def readColor():
+    global data, cursor
+    assert data[cursor] == magicSInt8
+    cursor += 1
+    r = readByte()
+    assert data[cursor] == magicSInt8
+    cursor += 1
+    g = readByte()
+    assert data[cursor] == magicUInt8
+    cursor += 1
+    b = readByte()
+    return "#"+'{:02X}'.format(r)+'{:02X}'.format(g)+'{:02X}'.format(b)
+
+def readOrder():
+    global data, cursor
+    assert data[cursor] == magicUInt8
+    cursor += 1
+    order = readByte()
+    return order
+
+def readFill():
+    global data, cursor
+    assert data[cursor] == magicUInt8
+    cursor += 1
+    fill = readByte()
+    return fill
+
+def readTrueWidth():
+    global data, cursor
+    assert data[cursor] == magicUInt8
+    cursor += 1
+    trueWidth = readByte()
+    return trueWidth
+
+def readScCoordinate():
+    global data, cursor
+    s = data[cursor:cursor+10]
+    cursor += 10
+    return "0x"+"-".join('{:02X}'.format(ord(a)) for a in s)
+
+def readConfigGerber():
+    global data, cursor
+    assert data[cursor] == magicID
+    cursor += 1
+    id = readUInt32()
+    name = readString()
+    return "id="+str(id)+",name="+name
+
+def readConfigItem():
+    global data, cursor
+    assert data[cursor] == magicID
+    cursor += 1
+    id = readUInt32()
+    name = readString()
+    return "id="+str(id)+",name="+name
+
+def readShapeType():
+    global data, cursor
+    assert data[cursor] == magicUInt8
+    cursor += 1
+    t = readByte()
+    return str(t)
+
+def readShapeParameter():
+    global data, cursor
+    assert data[cursor] == magicFloat32
+    cursor += 1
+    f = readFloat32()
+    return str(f)
+
+def readPtr():
+    global data, cursor
+    assert data[cursor] == magicUnknown1
+    cursor += 1
+    a = readFloat32()
+    assert data[cursor] == magicFloat32
+    cursor += 1
+    b = readFloat32()
+    assert data[cursor] == magicFloat32
+    cursor += 1
+    c = readFloat32()
+    return str(a)+","+str(b)+","+str(c)
+
+def readEndType():
+    global data, cursor
+    assert data[cursor] == magicUnknown2
+    cursor += 1
+    t = readByte()
+    return str(t)
+
+def readCornerType():
+    global data, cursor
+    assert data[cursor] == magicUnknown2
+    cursor += 1
+    t = readByte()
+    return str(t)
+
+def readPathWidth():
+    global data, cursor
+    assert data[cursor] == magicFloat32
+    cursor += 1
+    f = readFloat32()
+    return str(f)
+
+#
+# Begin parsing a block in the file
+# begins at first byte after block start
+#
+def parseBlock():
+    global data, cursor
+    j = ord(data[cursor])
+    decoded = dictionary[j]
+    print hex(j)+"=>"+decoded,
+    cursor += 1
+
+    if decoded == "CAM_V0":
+        # expect one byte of unknown purpose + 4x zeroes
+        cursor += 5
+        # + 1x string
+        name = readString()
+        print name,
+
+    elif decoded == "ScInfo":
+        # has no arguments
+        return
+
+    elif decoded == "ScSerialNumber":
+        ScSerialNumber = readString()
+        print ScSerialNumber,
+
+    elif decoded == "ScOrganization":
+        ScOrganization = readString()
+        print ScOrganization,
+
+    elif decoded == "ScLocation":
+        ScLocation = readString()
+        print ScLocation,
+
+    elif decoded == "ScUser":
+        ScUser = readString()
+        print ScUser,
+
+    elif decoded == "timeStamp":
+        timeStamp = readTimeStamp()
+        print timeStamp,
+
+    elif decoded == "ScTemplate":
+        ScTemplate = readString()
+        print ScTemplate,
+
+    elif decoded == "comment":
+        comment = readString()
+        print comment,
+
+    elif decoded == "levels":
+        # no arguments
+        return
+
+    elif decoded == "designLevel":
+        print readDesignLevel(),
+
+    elif decoded == "displayAttributes":
+        # no arguments
+        return
+
+    elif decoded == "color":
+        print readColor(),
+
+    elif decoded == "order":
+        print readOrder(),
+
+    elif decoded == "fill":
+        print readFill(),
+
+    elif decoded == "trueWidth":
+        print readTrueWidth(),
+
+    elif decoded == "configurations":
+        # no arguments
+        return
+
+    elif decoded == "configsGerber":
+        # no arguments
+        return
+
+    elif decoded == "configGerber":
+        print readConfigGerber(),
+
+    elif decoded == "configHeader":
+        # no arguments
+        return
+
+    elif decoded == "ScCoordinate":
+        print readScCoordinate(),
+
+    elif decoded == "configItem":
+        print readConfigItem(),
+
+    elif decoded == "configItemHeader":
+        # no arguments
+        return
+
+    elif decoded == "shapeType":
+        print readShapeType(),
+
+    elif decoded == "shapeParameter":
+        print readShapeParameter(),
+
+    elif decoded == "flashAttribute":
+        # no arguments
+        return
+
+    elif decoded == "circle":
+        # no arguments
+        return
+
+    elif decoded == "ptr":
+        print readPtr(),
+
+    elif decoded == "drawAttribute":
+        # no arguments
+        return
+
+    elif decoded == "endType":
+        print readEndType(),
+
+    elif decoded == "cornerType":
+        print readCornerType(),
+
+    elif decoded == "pathWidth":
+        print readPathWidth(),
+
+    else:
+        print "unsupported block type encountered"
+        exit()
+
+#
+# Parse all entries in the file
+#
+for i in range(700):
+    if data[cursor] == '\x55':
+        # begin section?
         cursor += 1
-    cursor += 1
+        print ";",
+        parseBlock()
 
-    # info? setup?
-    layerMeta = ""
-    while data[cursor-2:cursor] != "\x20\x20":
-        layerMeta += data[cursor]
+    elif data[cursor] == '\x95':
+        # begin section?
         cursor += 1
+        print "(",
+        parseBlock()
 
-    layer[layerNr] = [layerMagic, layerName, len(layerMeta), hex(len(layerMeta)), layerMeta]
-
-PrettyPrinter(indent=4).pprint(layer)
-raw_input("Hit return...");
-
-# skip the spaces
-while data[cursor] == '\x20':
-    cursor += 1
-
-# parse tool list
-print "Parsing tool list..."
-cursor = 0x1843
-
-# 0x95 4D: Beginn der Werkzeuggruppen
-# 0x95 4F: Beginn der Werkzeuggruppen
-
-# 0x95 29: Werkzeuggruppe
-
-# 0x95 1F: Werkzeugliste
-# 0x95 2F: Werkzeugliste
-# 0x95 30: Werkzeugliste
-# 0x95 33: Werkzeugliste
-
-# 0x95 27
-# 0x95 07 } Werkzeug
-# 0x95 08
-
-tools = []
-for i in range(81):
-    # magic: 0x95 27 02 or 0x95 07 02
-    toolMagic = data[cursor:cursor+3]
-    cursor += 3
-
-    toolNr = uint32(data[cursor:cursor+4])
-    cursor += 4
-
-    toolName = ""
-    while data[cursor] != '\0':
-        toolName += data[cursor]
+    elif data[cursor] == '\x20':
+        # end section
         cursor += 1
-    cursor += 1
+        print ")"
 
-    toolMeta = ""
-    while data[cursor:cursor+2] != '\x20\x95' \
-      and data[cursor:cursor+5] != '\x20\x20\x20\x20\xB5':
-        toolMeta += data[cursor]
-        cursor += 1
-    cursor += 1
-
-    tools.append( [toolMagic, toolNr, toolName, toolMeta] )
-
-    if data[cursor-1:cursor+3] == "\x20\x20\x20\x20":
-        # four spaces mark the end of the tool section
-        break
-
-PrettyPrinter(indent=4).pprint(tools)
-raw_input("Hit return...");
-
-# something with units (?)
-print "Skipping something with units..."
-while data[cursor:cursor+2] != "\x95\x33" \
-  and data[cursor:cursor+2] != "\x95\x34":
-    cursor += 1
-while data[cursor:cursor+3] != "\x95\x26\x03" \
-  and data[cursor:cursor+3] != "\x95\x21\x03":
-    cursor += 1
-
-# tons of coordinates...
-print "Parsing design..."
-
-while data[cursor:cursor+3] == "\x95\x26\x03" \
-   or data[cursor:cursor+3] == "\x95\x21\x03":
-    begin = cursor
-
-    # 0x95 26 03
-    # or
-    # 0x95 21 03
-    cursor += 3
-
-    layerNr = uint32(data[cursor:cursor+4])
-    cursor += 4
-    print "Layer:  "+ANSI_FG_CYAN+str(layerNr)+" = "+layer[layerNr][1]+ANSI_RESET
-    print "Begin:  "+hex(begin)
-
-#    for i in range(4):
-#        drillHole = data[cursor:cursor+19]
-#        for b in drillHole:
-#            print "{0:#0{1}x}".format(ord(b),4),
-#        print
-#        cursor += 19
-
-    while data[cursor:cursor+2] != "\x20\x95":
-        cursor += 1
-
-    # 0x20
-    cursor += 1
-
-    end = cursor
-    print "End:    "+hex(end)
-
-    wrap = [2, 6]
-    for c in range(begin,end):
-        # end
-        if data[c] == '\x20' \
-        and data[c-1] != '\x55' \
-        and data[c-4:c-2] != "\x55\x00" \
-        and data[c-3:c-1] != "\x55\x00":
-            print
-            print "{0:#0{1}x}".format(ord(data[c]),4) + ANSI_FG_YELLOW + " // end" + ANSI_RESET
-        else:
-            print "{0:#0{1}x}".format(ord(data[c]),4),
-
-        if data[c+1:c+3] == "\x55\x04":
-            print ANSI_FG_YELLOW + "\n// begin something" + ANSI_RESET,
-
-        # polygon parsing
-        if data[c+1:c+3] == "\x55\x0b":
-            print ANSI_FG_YELLOW + "\n// begin polygon" + ANSI_RESET,
-
-        if data[c+1:c+3] == "\x55\x1f":
-            print ANSI_FG_YELLOW + "\n// begin something" + ANSI_RESET,
-
-        if data[c+1:c+3] == "\x55\x20":
-            print ANSI_FG_YELLOW + "\n// begin something" + ANSI_RESET,
-
-        if data[c+1:c+3] == "\x55\x24":
-            print ANSI_FG_YELLOW + "\n// begin something" + ANSI_RESET,
-
-        # coordinates parsing
-        if (data[c+1] == '\x55' or data[c+1] == '\x20') \
-        and data[c-3] != '\x55':
-            s = None
-            radius = None
-            if data[c-11:c-9] == "\x55\x00":
-                # 2x values
-                s = data[c-11:c+1]
-
-            if data[c-16:c-14] == "\x55\x00":
-                # 3x values
-                s = data[c-16:c+1]
-                radius = s[13:17]
-
-            if s != None:
-                x = s[3:7]
-                print ANSI_FG_CYAN,
-                for i in range(len(x)):
-                    print "{0:#0{1}x}".format(ord(x[i]),4),
-                print ANSI_FG_YELLOW + "X=" + ANSI_RESET + str(float32(x)),
-
-                y = s[8:12]
-                print ANSI_FG_CYAN,
-                for i in range(len(y)):
-                    print "{0:#0{1}x}".format(ord(y[i]),4),
-                print ANSI_FG_YELLOW + "Y=" + ANSI_RESET + str(float32(y)),
-
-                if radius != None:
-                    print ANSI_FG_CYAN,
-                    for i in range(len(radius)):
-                        print "{0:#0{1}x}".format(ord(radius[i]),4),
-                    print ANSI_FG_YELLOW + "R=" + ANSI_RESET + str(float32(radius)),
-
-        if data[c+1:c+3] == "\x55\x00":
-            print ANSI_FG_MAGENTA + "\n// coordinates" + ANSI_RESET,
-
-        # circle/arc parsing
-        if data[c+1:c+3] == "\x55\x05":
-            print ANSI_FG_GREEN + "\n// circle/arc" + ANSI_RESET,
-
-        # pretty-printing
-        if data[c+1:c+3] == "\x55\x00" \
-        or data[c+1:c+3] == "\x55\x01" \
-        or data[c+1:c+3] == "\x55\x04" \
-        or data[c+1:c+3] == "\x55\x05" \
-        or data[c+1:c+3] == "\x55\x0b" \
-        or data[c+1:c+3] == "\x55\x17" \
-        or data[c+1:c+3] == "\x55\x1e" \
-        or data[c+1:c+3] == "\x55\x1f" \
-        or data[c+1:c+3] == "\x55\x18" \
-        or data[c+1:c+3] == "\x55\x24":
-            print
-
-        try:
-            if wrap.index(c-begin) > -1:
-                print
-        except:
-            pass
-
-    print
-    print "Length: "+str(end-begin)
-    raw_input("Hit return...");
-
-
-cursor = 0x369DF
-# 0x95 39 02
-
-# three phases follow:
-# * InsulateDefaultBottom
-# * InsulateDefaultTop
-# * InsulatePrevious
-
-cursor = 0x36EAA
-# 0x95 29 02
-
-# many phases follow (?)
-
+print

@@ -3,14 +3,11 @@
 from struct import unpack
 
 #
-# Interpret 4 bytes as little-endian 32-bit integer
+# String to integer conversion
 #
 def uint32(s):
     return unpack('<L', s)[0]
 
-#
-# Interpret 4 bytes as little-endian 32-bit float
-#
 def float32(s):
     return unpack('<f', s)[0]
 
