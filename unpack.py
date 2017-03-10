@@ -14,16 +14,21 @@ if len(argv) > 1:
 data = open(filename,'r').read()
 cursor = 0
 
+# layers
+objectNames = {}
+
 
 #
 # Magic bytes indicate the type of the following data
 #
 magicName      = '\x01'  # only the name string follows
 magicIdName    = '\x02'  # an ID and a name string follow
+magicId        = '\x03'  # four bytes ID follow
 magicTransform = '\x05'  # 1 byte follows
 magicSInt8     = '\x07'
 magicSInt16    = '\x08'
 magicSInt64    = '\x1a'  # 8 bytes follow, more significant 4 bytes first, in both 4 byte blocks: little-endian
+magicConfigRef = '\x23'  # 4 bytes follow, basically a 32-bit unsigned integer
 magicUInt8     = '\x27'
 magicUInt16    = '\x28'
 magicUInt32    = '\x29'
@@ -120,14 +125,23 @@ def readTimeStamp():
     cursor += 13
 
 def readIdName():
-    global data, cursor
+    global data, cursor, objectNames
     assert data[cursor] == magicIdName
     cursor += 1
-    # object id
+    # object ID
     id = readUInt32()
     # layer name as string
     name = readString()
+    objectNames[id] = name
     return "id="+str(id)+",name="+name
+
+def readId():
+    global data, cursor, objectNames
+    assert data[cursor] == magicId
+    cursor += 1
+    # object ID
+    id = readUInt32()
+    return str(id)+ " ("+objectNames[id]+")"
 
 def readConfigItem():
     global data, cursor
@@ -140,6 +154,16 @@ def readConfigItem():
             s2 += '{:02X}'.format(ord(data[cursor]))
             cursor += 1
     return s+s2
+
+def readConfigItemRef():
+    return readId()
+
+def readConfigRef():
+    global data, cursor, objectNames
+    assert data[cursor] == magicConfigRef
+    cursor += 1
+    r = readUInt32()
+    return str(r)+" ("+objectNames[r]+")"
 
 def readColor():
     global data, cursor
@@ -421,6 +445,12 @@ def readJobForm():
     a = readSInt8()
     return str(a)
 
+def readLevelObject():
+    global data, cursor, designLevel
+    assert data[cursor] == magicId
+    cursor += 1
+    layer = readUInt32()
+    return "Layer:"+str(layer)+" ("+objectNames[layer]+")"
 
 #
 # Begin parsing a block in the file
@@ -520,6 +550,12 @@ def parseBlock():
         # no arguments
         return
 
+    elif decoded == "configItemRef":
+        print readConfigItemRef(),
+
+    elif decoded == "configRef":
+        print readConfigRef(),
+
     elif decoded == "shapeType":
         print readShapeType(),
 
@@ -552,11 +588,7 @@ def parseBlock():
     elif decoded == "minDrawLength":
         print readMinDrawLength(),
 
-    elif decoded == "path":
-        # no arguments
-        return
-
-    elif decoded == "curve":
+    elif decoded == "flash":
         # no arguments
         return
 
@@ -565,6 +597,26 @@ def parseBlock():
         return
 
     elif decoded == "rectangle":
+        # no arguments
+        return
+
+    elif decoded == "path":
+        # no arguments
+        return
+
+    elif decoded == "curve":
+        # no arguments
+        return
+
+    elif decoded == "closedCurve":
+        # no arguments
+        return
+
+    elif decoded == "polygonCutOut":
+        # no arguments
+        return
+
+    elif decoded == "polygon":
         # no arguments
         return
 
