@@ -18,25 +18,35 @@ cursor = 0
 #
 # Magic bytes indicate the type of the following data
 #
-magicID      = '\x02'
-magicTransform = '\x05' # 1 byte follows
-magicSInt8   = '\x07'
-magicSInt16  = '\x08'
-magicUInt8   = '\x27'
-magicUInt64  = '\x1a'  # 8 bytes follow, more significant 4 bytes first, in both 4 byte blocks: little-endian
-magicFloat32 = '\x2a'  # 4 bytes, little-endian
-magicUnknown1 = '\x0a' # 4 bytes follow
-magicUnknown2 = '\x25' # 1 byte follows
-magicBoolean = '\x67'  # 1 byte follow, 0x00 or 0x01
+magicName      = '\x01'  # only the name string follows
+magicIdName    = '\x02'  # an ID and a name string follow
+magicTransform = '\x05'  # 1 byte follows
+magicSInt8     = '\x07'
+magicSInt16    = '\x08'
+magicSInt64    = '\x1a'  # 8 bytes follow, more significant 4 bytes first, in both 4 byte blocks: little-endian
+magicUInt8     = '\x27'
+magicUInt16    = '\x28'
+magicUInt32    = '\x29'
+magicFloat32   = '\x2a'  # 4 bytes, little-endian
+magicUnknown1  = '\x0a'  # 4 bytes follow
+magicUnknown2  = '\x25'  # 1 byte follows
+magicUnknown3  = '\x47'  # 1 byte follow
+magicBoolean   = '\x67'  # 1 byte follow, 0x00 or 0x01
 
 #
 # Functions for reading a data type
 #
-def readByte():
+def readUInt8():
     global data, cursor
     b = data[cursor]
     cursor += 1
     return ord(b)
+
+def readUInt16():
+    global data, cursor
+    i = uint16(data[cursor:cursor+2])
+    cursor += 2
+    return i
 
 def readUInt32():
     global data, cursor
@@ -47,7 +57,7 @@ def readUInt32():
 # TODO
 def readSInt8():
     # maybe this needs change
-    return readByte()
+    return readUInt8()
 
 # TODO
 def readSInt16():
@@ -111,7 +121,7 @@ def readTimeStamp():
 
 def readIdName():
     global data, cursor
-    assert data[cursor] == magicID
+    assert data[cursor] == magicIdName
     cursor += 1
     # object id
     id = readUInt32()
@@ -135,34 +145,34 @@ def readColor():
     global data, cursor
     assert data[cursor] == magicSInt8
     cursor += 1
-    r = readByte()
+    r = readUInt8()
     assert data[cursor] == magicSInt8
     cursor += 1
-    g = readByte()
+    g = readUInt8()
     assert data[cursor] == magicUInt8
     cursor += 1
-    b = readByte()
+    b = readUInt8()
     return "#"+'{:02X}'.format(r)+'{:02X}'.format(g)+'{:02X}'.format(b)
 
 def readOrder():
     global data, cursor
     assert data[cursor] == magicUInt8
     cursor += 1
-    order = readByte()
+    order = readUInt8()
     return order
 
 def readFill():
     global data, cursor
     assert data[cursor] == magicUInt8
     cursor += 1
-    fill = readByte()
+    fill = readUInt8()
     return fill
 
 def readTrueWidth():
     global data, cursor
     assert data[cursor] == magicUInt8
     cursor += 1
-    trueWidth = readByte()
+    trueWidth = readUInt8()
     return trueWidth
 
 def readScCoordinate():
@@ -180,11 +190,11 @@ def readScScale():
     f = readFloat32()
     assert data[cursor] in [magicSInt8, magicUInt8]
     cursor += 1
-    b = readByte()
+    b = readUInt8()
     if data[cursor] in [magicSInt8, magicUInt8]:
         # read another byte and float
         cursor += 1
-        b2 = readByte()
+        b2 = readUInt8()
         assert data[cursor] == magicFloat32
         cursor += 1
         f2 = readFloat32()
@@ -196,7 +206,7 @@ def readShapeType():
     global data, cursor
     assert data[cursor] == magicUInt8
     cursor += 1
-    t = readByte()
+    t = readUInt8()
     return str(t)
 
 def readShapeParameter():
@@ -237,14 +247,14 @@ def readEndType():
     global data, cursor
     assert data[cursor] == magicUnknown2
     cursor += 1
-    t = readByte()
+    t = readUInt8()
     return str(t)
 
 def readCornerType():
     global data, cursor
     assert data[cursor] == magicUnknown2
     cursor += 1
-    t = readByte()
+    t = readUInt8()
     return str(t)
 
 def readPathWidth():
@@ -258,9 +268,8 @@ def readTransform():
     global data, cursor
     assert data[cursor] == magicTransform
     cursor += 1
-    b = readByte()
+    b = readUInt8()
     return str(b)
-
 
 #
 # captureInterval can have multiple layouts:
@@ -287,8 +296,8 @@ def readCaptureInterval():
         return "f,f="+str(f1)+","+str(f2)
     # else:
     if not extraFloat:
-        b1 = readByte()
-        b2 = readByte()
+        b1 = readUInt8()
+        b2 = readUInt8()
     assert data[cursor] == magicFloat32
     cursor += 1
     f3 = readFloat32()
@@ -328,7 +337,7 @@ def readE():
 
     assert data[cursor] == magicUInt8
     cursor += 1
-    u = readByte()
+    u = readUInt8()
 
     assert data[cursor] == magicBoolean
     cursor += 1
@@ -336,18 +345,44 @@ def readE():
 
     return str(v)+","+str(u)+","+str(b)
 
+def readJobInsulate():
+    return readIdName()
+
+def readJobOutput():
+    global data, cursor
+    assert data[cursor] in [magicName, magicIdName]
+    t = data[cursor]
+    if t == magicName:
+        cursor += 1
+        return readString()
+    elif t == magicIdName:
+        return readIdName()
+
+def readJobCommand():
+    return readIdName()
+
 def readJobInteger():
     global data, cursor
     assert data[cursor] == magicSInt8
     cursor += 1
     i1 = readSInt8()
-    print hex(ord(data[cursor]))
-    print hex(ord(data[cursor+1]))
-    print hex(ord(data[cursor+2]))
-    assert data[cursor] == magicUInt8
+    assert data[cursor] in [magicUInt8, magicUInt16, magicUInt32]
+    t = data[cursor]
     cursor += 1
-    i2 = readByte()
-    return str(i1)+","+str(i2)
+    if t == magicUInt8:
+        i2 = readUInt8()
+    elif t == magicUInt16:
+        i2 = readUInt16()
+    elif t == magicUInt32:
+        i2 = readUInt32()
+    return 'Nr.'+str(i1)+" = "+str(i2)
+
+def readJobBlock():
+    global data, cursor
+    assert data[cursor] == magicUnknown3
+    cursor += 1
+    v = readUInt8()
+    return str(v)
 
 def readJobReal():
     global data, cursor
@@ -357,7 +392,7 @@ def readJobReal():
     assert data[cursor] == magicFloat32
     cursor += 1
     f = readFloat32()
-    return str(a)+","+str(f)
+    return "Nr."+str(a)+" = "+str(f)
 
 def readJobIdentifier():
     global data, cursor
@@ -365,7 +400,7 @@ def readJobIdentifier():
     cursor += 1
     a = readSInt8()
     s = readString()
-    return str(a)+","+s
+    return "Nr."+str(a)+" = "+s
 
 def readJobString():
     global data, cursor
@@ -567,14 +602,32 @@ def parseBlock():
     elif decoded == "jobs" \
       or decoded == "jobsInsulate" \
       or decoded == "jobsOutput" \
-      or decoded == "jobHeader" \
+      or decoded == "jobsCommand":
+        # no arguments
+        return
+
+    elif decoded == "jobHeader" \
       or decoded == "jobTask":
         # no arguments
         return
 
-    elif decoded == "jobInsulate" \
-      or decoded == "jobOutput":
-        print readIdName(),
+    elif decoded == "jobInsulate":
+        print readJobInsulate(),
+
+    elif decoded == "jobOutput":
+        print readJobOutput(),
+
+    elif decoded == "jobCommand":
+        print readJobCommand(),
+
+    elif decoded == "jobForm":
+        print readJobForm(),
+
+    elif decoded == "jobBlock":
+        print readJobBlock(),
+
+    elif decoded == "jobIdentifier":
+        print readJobIdentifier(),
 
     elif decoded == "jobInteger":
         print readJobInteger(),
@@ -582,17 +635,18 @@ def parseBlock():
     elif decoded == "jobReal":
         print readJobReal(),
 
-    elif decoded == "jobIdentifier":
-        print readJobIdentifier(),
-
     elif decoded == "jobString":
         print readJobString(),
 
-    elif decoded == "jobForm":
-        print readJobForm(),
-
     elif decoded == "transform":
         print readTransform(),
+
+    elif decoded == "levelObjects":
+        # no arguments
+        return
+
+    elif decoded == "levelObject":
+        print readLevelObject(),
 
     else:
         print "unsupported block type encountered"
@@ -601,7 +655,7 @@ def parseBlock():
 #
 # Parse all entries in the file
 #
-for i in range(2000):
+while cursor < len(data):
     assert data[cursor] in "\x55\x95\x20\xB5\x52"
 
     if data[cursor] == '\x55':

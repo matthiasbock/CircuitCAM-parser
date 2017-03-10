@@ -5,6 +5,9 @@ from struct import unpack
 #
 # String to integer conversion
 #
+def uint16(s):
+    return unpack('<H', s)[0]
+
 def uint32(s):
     return unpack('<L', s)[0]
 
