@@ -5,6 +5,7 @@ from pprint import PrettyPrinter
 from ansi import *
 from helper import *
 from magic import *
+from dom import *
 
 # import file
 filename = "CircuitCAM.cam"
@@ -16,6 +17,12 @@ cursor = 0
 
 # layers
 objectNames = {}
+
+# DOM
+dom = Node()
+
+# pointer to currently parsed object in DOM
+domCursor = dom
 
 
 #
@@ -133,7 +140,7 @@ def readIdName():
     # layer name as string
     name = readString()
     objectNames[id] = name
-    return "id="+str(id)+",name="+name
+    return "id="+str(id)+",name="+name, id, name
 
 def readId():
     global data, cursor, objectNames
@@ -452,31 +459,42 @@ def readLevelObject():
     layer = readUInt32()
     return "Layer:"+str(layer)+" ("+objectNames[layer]+")"
 
+def createChildNode(name=None):
+    global dom, domCursor
+    newNode = Node(name)
+    if domCursor != None:
+        newNode.setParent(domCursor)
+        domCursor.appendChild(newNode)
+    domCursor = newNode
+
 #
 # Begin parsing a block in the file
 # begins at first byte after block start
 #
 def parseBlock():
-    global data, cursor
+    global data, cursor, dom, domCursor
     j = ord(data[cursor])
     decoded = dictionary[j]
-    print hex(j)+"=>"+decoded,
+    #print hex(j)+"=>"+decoded,
+    print decoded,
     cursor += 1
 
     if decoded == "CAM_V0":
-        # expect one byte of unknown purpose + 4x zeroes
-        cursor += 5
-        # + 1x string
-        name = readString()
-        print name,
+        s, ID, name = readIdName()
+        print s,
+        createChildNode()
+        domCursor.appendAttribute("ID", ID)
+        domCursor.appendAttribute("name", name)
 
     elif decoded == "ScInfo":
-        # has no arguments
+        createChildNode("ScInfo")
         return
 
     elif decoded == "ScSerialNumber":
-        ScSerialNumber = readString()
-        print ScSerialNumber,
+        s = readString()
+        domCursor.appendAttribute("ScSerialNumber", s)
+        print dom
+        print s,
 
     elif decoded == "ScOrganization":
         ScOrganization = readString()
@@ -489,6 +507,9 @@ def parseBlock():
     elif decoded == "ScUser":
         ScUser = readString()
         print ScUser,
+
+    elif decoded == "ScCoordinate":
+        print readScCoordinate(),
 
     elif decoded == "timeStamp":
         timeStamp = readTimeStamp()
@@ -507,7 +528,8 @@ def parseBlock():
         return
 
     elif decoded == "designLevel":
-        print readIdName(),
+        s, ID, name = readIdName()
+        print s,
 
     elif decoded == "displayAttributes":
         # no arguments
@@ -539,9 +561,6 @@ def parseBlock():
     elif decoded == "configHeader":
         # no arguments
         return
-
-    elif decoded == "ScCoordinate":
-        print readScCoordinate(),
 
     elif decoded == "configItem":
         print readConfigItem(),
@@ -710,26 +729,26 @@ def parseBlock():
 while cursor < len(data):
     assert data[cursor] in "\x55\x95\x20\xB5\x52"
 
-    if data[cursor] == '\x55':
-        # begin section?
-        cursor += 1
-        print ";",
-        parseBlock()
-
-    elif data[cursor] == '\x95':
-        # begin section?
+    if data[cursor] == '\x95':
+        # begin tag
         cursor += 1
         print "(",
+        parseBlock()
+
+    elif data[cursor] == '\x55':
+        # begin attribute
+        cursor += 1
+        print ";",
         parseBlock()
 
     elif data[cursor] == '\x20':
         # end section
         cursor += 1
+        domCursor = domCursor.getParent()
         print ")"
 
     elif data[cursor] == '\xb5':
         # no idea, what this is
-        # comes after block 'configsHpgl'
         print "Encountered unrecognized byte sequence"
         cursor += 2
 
