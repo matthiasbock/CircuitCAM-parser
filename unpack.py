@@ -485,6 +485,10 @@ def parseBlock():
     print decoded,
     cursor += 1
 
+    # things are about to explode => debug output
+    if domCursor == None:
+        print dom
+
     if decoded == "CAM_V0":
         ID, name = readIdName()
         domCursor = createChildNode(decoded)
@@ -505,10 +509,10 @@ def parseBlock():
       or decoded == "levels" \
       or decoded == "flashAttribute" \
       or decoded == "drawAttribute" \
+      or decoded == "path" \
+      or decoded == "rectangle" \
       or decoded == "flash" \
       or decoded == "circle" \
-      or decoded == "rectangle" \
-      or decoded == "path" \
       or decoded == "curve" \
       or decoded == "closedCurve" \
       or decoded == "polygonCutOut" \
@@ -532,11 +536,12 @@ def parseBlock():
         domCursor.appendAttribute(decoded, readString())
 
     elif decoded == "ScCoordinate":
-        print readScCoordinate(),
+        x = readScCoordinate()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "timeStamp":
-        timeStamp = readTimeStamp()
-        print timeStamp,
+        x = readTimeStamp()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "designLevel":
         ID, name = readIdName()
@@ -549,11 +554,12 @@ def parseBlock():
         domCursor.appendAttribute(decoded, color2string(color))
 
     elif decoded == "order":
-        order = readOrder()
-        domCursor.appendAttribute(decoded, order)
+        x = readOrder()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "fill":
-        print readFill(),
+        x = readFill()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "trueWidth":
         print readTrueWidth(),
@@ -566,90 +572,113 @@ def parseBlock():
       or decoded == "configDxf" \
       or decoded == "layout":
         ID, name = readIdName()
+        domCursor = createChildNode(decoded)
         domCursor.appendAttribute("id", ID)
         domCursor.appendAttribute("name", name)
 
     elif decoded == "configItem":
         # configItem has a weird variant with +4 unknown bytes
         ID, name = readConfigItem()
-        domCursor = createChildNode()
+        print str(ID)+","+name,
+        domCursor = createChildNode(decoded)
         domCursor.appendAttribute("id", ID)
         domCursor.appendAttribute("name", name)
 
     elif decoded == "configItemRef":
-        print readConfigItemRef(),
+        x = readConfigItemRef()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "configRef":
-        print readConfigRef(),
+        x = readConfigRef()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "shapeType":
-        print readShapeType(),
+        x = readShapeType()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "shapeParameter":
-        print readShapeParameter(),
+        x = readShapeParameter()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "ptr":
-        print readPtr(),
+        x = readPtr()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "endType":
-        print readEndType(),
+        x = readEndType()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "cornerType":
-        print readCornerType(),
+        x = readCornerType()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "pathWidth":
-        print readPathWidth(),
+        x = readPathWidth()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "captureInterval":
-        print readCaptureInterval(),
+        x = readCaptureInterval()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "minDrawLength":
-        print readMinDrawLength(),
+        x = readMinDrawLength()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "ScScale":
-        print readScScale(),
+        x = readScScale()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "overlap":
-        print readOverlap(),
+        x = readOverlap()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "e":
-        print readE(),
+        x = readE()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "jobInsulate":
-        print readJobInsulate(),
+        x = readJobInsulate()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "jobOutput":
-        print readJobOutput(),
+        x = readJobOutput()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "jobCommand":
-        print readJobCommand(),
+        x = readJobCommand()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "jobForm":
-        print readJobForm(),
+        x = readJobForm()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "jobBlock":
-        print readJobBlock(),
+        x = readJobBlock()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "jobIdentifier":
-        print readJobIdentifier(),
+        x = readJobIdentifier()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "jobInteger":
-        print readJobInteger(),
+        x = readJobInteger()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "jobReal":
-        print readJobReal(),
+        x = readJobReal()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "jobString":
-        print readJobString(),
+        x = readJobString()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "transform":
-        print readTransform(),
+        x = readTransform()
+        domCursor.appendAttribute(decoded, x)
 
     elif decoded == "levelObject":
-        ID = readLevelObject()
-        print objectNames
-        print "Layer:"+str(ID)+" ("+objectNames[ID]+")"
-        domCursor.appendAttribute("id", ID)
+        x = readLevelObject()
+        domCursor.appendAttribute(decoded, x)
 
     else:
         print "unsupported block type encountered"
