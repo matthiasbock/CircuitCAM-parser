@@ -15,10 +15,7 @@
 class Node:
     def __init__(this, name=None, parent=None):
         this.name = name
-        this.parent = parent
-        this.indentLevel = 0
-        if parent != None:
-            this.indentLevel = parent.indentLevel + 1
+        this.setParent(parent)
         this.attributes = {}
         this.children = []
 
@@ -27,6 +24,9 @@ class Node:
 
     def setParent(this, parent):
         this.parent = parent
+        this.indentLevel = 0
+        if parent != None:
+            this.indentLevel = parent.indentLevel + 1
 
     def getParent(this):
         return this.parent
@@ -52,7 +52,9 @@ class Node:
         if type(attribute) is dict:
             s += "{" + ", ".join(str(subkey)+":"+str(attribute[subkey]) for subkey in attribute.keys()) + "}"
         elif type(attribute) is str:
-            s += attribute
+            s += '"'+attribute+'"'
+        elif type(attribute) is int:
+            s += '"'+str(attribute)+'"'
         else:
             print "Error: Invalid attribute type"
         return s
@@ -67,16 +69,18 @@ class Node:
         s = this.indentation() + "<"
         # tag name
         if this.name != None:
-            s += this.name + " "
+            s += this.name
+            if len(this.attributes) > 0:
+                s += ' '
         # attributes
         s += " ".join(this.attributeString(key) for key in this.attributes.keys())
         # child nodes
         if len(this.children) == 0:
             s += "/>\n"  # self-enclosing tag
         else:
-            for child in this.children:
-                # only other Node objects can be children
-                s += child.xml()
+            s += ">\n"
+            # only other Node objects can be children
+            s += " ".join([child.xml() for child in this.children])
             s += this.indentation() + "</"
             if this.name != None:
                 s += this.name

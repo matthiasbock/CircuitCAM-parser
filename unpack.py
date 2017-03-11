@@ -19,7 +19,7 @@ cursor = 0
 objectNames = {}
 
 # DOM
-dom = Node()
+dom = None
 
 # pointer to currently parsed object in DOM
 domCursor = dom
@@ -31,6 +31,7 @@ domCursor = dom
 magicName      = '\x01'  # only the name string follows
 magicIdName    = '\x02'  # an ID and a name string follow
 magicId        = '\x03'  # four bytes ID follow
+magicPath      = '\x04'  # null-terminated string follows
 magicTransform = '\x05'  # 1 byte follows
 magicSInt8     = '\x07'
 magicSInt16    = '\x08'
@@ -136,23 +137,21 @@ def readIdName():
     assert data[cursor] == magicIdName
     cursor += 1
     # object ID
-    id = readUInt32()
+    ID = readUInt32()
     # layer name as string
     name = readString()
-    objectNames[id] = name
-    return "id="+str(id)+",name="+name, id, name
+    objectNames[ID] = name
+    return ID, name
 
 def readId():
     global data, cursor, objectNames
     assert data[cursor] == magicId
     cursor += 1
-    # object ID
-    id = readUInt32()
-    return str(id)+ " ("+objectNames[id]+")"
+    return readUInt32()
 
 def readConfigItem():
     global data, cursor
-    s = readIdName()
+    id, name = readIdName()
     s2 = ""
     if not data[cursor] in "\x55\x95\x20":
         s2 = "::0x"
@@ -160,7 +159,7 @@ def readConfigItem():
         for i in range(4):
             s2 += '{:02X}'.format(ord(data[cursor]))
             cursor += 1
-    return s+s2
+    return id, name+s2
 
 def readConfigItemRef():
     return readId()
@@ -183,6 +182,12 @@ def readColor():
     assert data[cursor] == magicUInt8
     cursor += 1
     b = readUInt8()
+    return r << 16 | g << 8 | b
+
+def color2string(c):
+    r = c & 0xFF0000
+    g = c & 0x00FF00
+    b = c & 0x0000FF
     return "#"+'{:02X}'.format(r)+'{:02X}'.format(g)+'{:02X}'.format(b)
 
 def readOrder():
@@ -453,26 +458,27 @@ def readJobForm():
     return str(a)
 
 def readLevelObject():
-    global data, cursor, designLevel
+    global data, cursor
     assert data[cursor] == magicId
     cursor += 1
-    layer = readUInt32()
-    return "Layer:"+str(layer)+" ("+objectNames[layer]+")"
+    return readUInt32()
 
 def createChildNode(name=None):
-    global dom, domCursor
+    global dom
     newNode = Node(name)
     if domCursor != None:
         newNode.setParent(domCursor)
         domCursor.appendChild(newNode)
-    domCursor = newNode
+    if dom == None:
+        dom = newNode
+    return newNode
 
 #
 # Begin parsing a block in the file
 # begins at first byte after block start
 #
 def parseBlock():
-    global data, cursor, dom, domCursor
+    global data, cursor, objectNames, dom, domCursor
     j = ord(data[cursor])
     decoded = dictionary[j]
     #print hex(j)+"=>"+decoded,
@@ -480,33 +486,50 @@ def parseBlock():
     cursor += 1
 
     if decoded == "CAM_V0":
-        s, ID, name = readIdName()
-        print s,
-        createChildNode()
+        ID, name = readIdName()
+        domCursor = createChildNode(decoded)
         domCursor.appendAttribute("ID", ID)
         domCursor.appendAttribute("name", name)
 
-    elif decoded == "ScInfo":
-        createChildNode("ScInfo")
-        return
+    elif decoded == "ScInfo" \
+      or decoded == "displayAttributes" \
+      or decoded == "configurations" \
+      or decoded == "configsGerber" \
+      or decoded == "configsSiebMeyer" \
+      or decoded == "configsExcellon" \
+      or decoded == "configsHpgl" \
+      or decoded == "configsLpkfMillDrill" \
+      or decoded == "configsDxf" \
+      or decoded == "configHeader" \
+      or decoded == "configItemHeader" \
+      or decoded == "levels" \
+      or decoded == "flashAttribute" \
+      or decoded == "drawAttribute" \
+      or decoded == "flash" \
+      or decoded == "circle" \
+      or decoded == "rectangle" \
+      or decoded == "path" \
+      or decoded == "curve" \
+      or decoded == "closedCurve" \
+      or decoded == "polygonCutOut" \
+      or decoded == "polygon" \
+      or decoded == "layouts" \
+      or decoded == "jobs" \
+      or decoded == "jobsInsulate" \
+      or decoded == "jobsOutput" \
+      or decoded == "jobsCommand" \
+      or decoded == "jobHeader" \
+      or decoded == "jobTask" \
+      or decoded == "levelObjects":
+        domCursor = createChildNode(decoded)
 
-    elif decoded == "ScSerialNumber":
-        s = readString()
-        domCursor.appendAttribute("ScSerialNumber", s)
-        print dom
-        print s,
-
-    elif decoded == "ScOrganization":
-        ScOrganization = readString()
-        print ScOrganization,
-
-    elif decoded == "ScLocation":
-        ScLocation = readString()
-        print ScLocation,
-
-    elif decoded == "ScUser":
-        ScUser = readString()
-        print ScUser,
+    elif decoded == "ScSerialNumber" \
+      or decoded == "ScOrganization" \
+      or decoded == "ScLocation" \
+      or decoded == "ScUser" \
+      or decoded == "ScTemplate" \
+      or decoded == "comment":
+        domCursor.appendAttribute(decoded, readString())
 
     elif decoded == "ScCoordinate":
         print readScCoordinate(),
@@ -515,31 +538,19 @@ def parseBlock():
         timeStamp = readTimeStamp()
         print timeStamp,
 
-    elif decoded == "ScTemplate":
-        ScTemplate = readString()
-        print ScTemplate,
-
-    elif decoded == "comment":
-        comment = readString()
-        print comment,
-
-    elif decoded == "levels":
-        # no arguments
-        return
-
     elif decoded == "designLevel":
-        s, ID, name = readIdName()
-        print s,
-
-    elif decoded == "displayAttributes":
-        # no arguments
-        return
+        ID, name = readIdName()
+        domCursor = createChildNode(decoded)
+        domCursor.appendAttribute("id", ID)
+        domCursor.appendAttribute("name", name)
 
     elif decoded == "color":
-        print readColor(),
+        color = readColor()
+        domCursor.appendAttribute(decoded, color2string(color))
 
     elif decoded == "order":
-        print readOrder(),
+        order = readOrder()
+        domCursor.appendAttribute(decoded, order)
 
     elif decoded == "fill":
         print readFill(),
@@ -547,27 +558,23 @@ def parseBlock():
     elif decoded == "trueWidth":
         print readTrueWidth(),
 
-    elif decoded == "configurations":
-        # no arguments
-        return
-
-    elif decoded == "configsGerber":
-        # no arguments
-        return
-
-    elif decoded == "configGerber":
-        print readIdName(),
-
-    elif decoded == "configHeader":
-        # no arguments
-        return
+    elif decoded == "configGerber" \
+      or decoded == "configSiebMeyer" \
+      or decoded == "configExcellon" \
+      or decoded == "configHpgl" \
+      or decoded == "configLpkfMillDrill" \
+      or decoded == "configDxf" \
+      or decoded == "layout":
+        ID, name = readIdName()
+        domCursor.appendAttribute("id", ID)
+        domCursor.appendAttribute("name", name)
 
     elif decoded == "configItem":
-        print readConfigItem(),
-
-    elif decoded == "configItemHeader":
-        # no arguments
-        return
+        # configItem has a weird variant with +4 unknown bytes
+        ID, name = readConfigItem()
+        domCursor = createChildNode()
+        domCursor.appendAttribute("id", ID)
+        domCursor.appendAttribute("name", name)
 
     elif decoded == "configItemRef":
         print readConfigItemRef(),
@@ -581,16 +588,8 @@ def parseBlock():
     elif decoded == "shapeParameter":
         print readShapeParameter(),
 
-    elif decoded == "flashAttribute":
-        # no arguments
-        return
-
     elif decoded == "ptr":
         print readPtr(),
-
-    elif decoded == "drawAttribute":
-        # no arguments
-        return
 
     elif decoded == "endType":
         print readEndType(),
@@ -607,53 +606,6 @@ def parseBlock():
     elif decoded == "minDrawLength":
         print readMinDrawLength(),
 
-    elif decoded == "flash":
-        # no arguments
-        return
-
-    elif decoded == "circle":
-        # no arguments
-        return
-
-    elif decoded == "rectangle":
-        # no arguments
-        return
-
-    elif decoded == "path":
-        # no arguments
-        return
-
-    elif decoded == "curve":
-        # no arguments
-        return
-
-    elif decoded == "closedCurve":
-        # no arguments
-        return
-
-    elif decoded == "polygonCutOut":
-        # no arguments
-        return
-
-    elif decoded == "polygon":
-        # no arguments
-        return
-
-    elif decoded == "configsSiebMeyer" \
-      or decoded == "configsExcellon" \
-      or decoded == "configsHpgl" \
-      or decoded == "configsLpkfMillDrill" \
-      or decoded == "configsDxf":
-        # no arguments
-        return
-
-    elif decoded == "configSiebMeyer" \
-      or decoded == "configExcellon" \
-      or decoded == "configHpgl" \
-      or decoded == "configLpkfMillDrill" \
-      or decoded == "configDxf":
-        print readIdName(),
-
     elif decoded == "ScScale":
         print readScScale(),
 
@@ -662,25 +614,6 @@ def parseBlock():
 
     elif decoded == "e":
         print readE(),
-
-    elif decoded == "layouts":
-        # no arguments
-        return
-
-    elif decoded == "layout":
-        print readIdName(),
-
-    elif decoded == "jobs" \
-      or decoded == "jobsInsulate" \
-      or decoded == "jobsOutput" \
-      or decoded == "jobsCommand":
-        # no arguments
-        return
-
-    elif decoded == "jobHeader" \
-      or decoded == "jobTask":
-        # no arguments
-        return
 
     elif decoded == "jobInsulate":
         print readJobInsulate(),
@@ -712,12 +645,11 @@ def parseBlock():
     elif decoded == "transform":
         print readTransform(),
 
-    elif decoded == "levelObjects":
-        # no arguments
-        return
-
     elif decoded == "levelObject":
-        print readLevelObject(),
+        ID = readLevelObject()
+        print objectNames
+        print "Layer:"+str(ID)+" ("+objectNames[ID]+")"
+        domCursor.appendAttribute("id", ID)
 
     else:
         print "unsupported block type encountered"
@@ -744,7 +676,8 @@ while cursor < len(data):
     elif data[cursor] == '\x20':
         # end section
         cursor += 1
-        domCursor = domCursor.getParent()
+        if domCursor != None:
+            domCursor = domCursor.getParent()
         print ")"
 
     elif data[cursor] == '\xb5':
@@ -752,4 +685,4 @@ while cursor < len(data):
         print "Encountered unrecognized byte sequence"
         cursor += 2
 
-print
+print dom

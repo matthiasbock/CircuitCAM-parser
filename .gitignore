@@ -8,3 +8,8 @@
 *.bmp
 *.pyc
 
+# outputs
+*.txt
+*.xml
+*.json
+
